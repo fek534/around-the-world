@@ -70,10 +70,21 @@
       <div class="rule"></div>
       <div class="row"><h3 data-i="stamps">الأختام</h3><span id="pCount" class="count">0/5</span></div>
       <ul id="slots" class="slots"></ul>
-      <p class="muted small" data-i="hint">الختم يتفعّل من كشك كل دولة مع المنظم.</p>
+      <p id="hint" class="muted small"></p>
+      <button id="drawBtn" class="gold" type="button" hidden></button>
     </div>
   </section>
 </main>
+
+<div id="modal" class="modal" hidden>
+  <form id="pinForm" class="sheet" autocomplete="off">
+    <h2 id="pinTitle"></h2>
+    <input id="pinIn" class="pin" inputmode="numeric" maxlength="6" aria-label="PIN">
+    <p id="pinErr" class="err" role="alert"></p>
+    <button class="gold" type="submit" data-i="ok">تأكيد</button>
+    <button id="pinCancel" class="ghost" type="button" data-i="cancel">إلغاء</button>
+  </form>
+</div>
 
 <script type="module" src="app.js"></script>
 </body>

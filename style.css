@@ -78,3 +78,20 @@ h3{font-size:1.1rem;color:var(--gold-2)}
 .slots li.done .nm{color:var(--gold-2)}
 
 @media (prefers-reduced-motion:reduce){.dots i{animation:none;opacity:.6}}
+
+/* stamps, modal, draw */
+.slots li{position:relative;cursor:pointer}
+.slots li.done{cursor:default}
+.slots li.done::after{content:"✓";position:absolute;top:6px;inset-inline-end:8px;width:24px;height:24px;display:grid;place-items:center;
+  border:2px solid var(--gold);border-radius:50%;color:var(--gold-2);font-weight:800;font-size:.85rem;transform:rotate(-12deg)}
+.pop{animation:pop .55s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(1.8) rotate(-14deg);opacity:0}to{transform:none;opacity:1}}
+#drawBtn{margin-top:14px}
+.modal{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:20px;background:rgba(3,8,20,.82)}
+.modal[hidden]{display:none}
+.modal form{width:100%;max-width:340px}
+.pin{text-align:center;font-size:1.7rem;letter-spacing:.4em;direction:ltr;margin-bottom:8px}
+.ghost{display:block;width:100%;background:transparent;border:0;color:var(--muted);padding:12px;margin-top:6px;font:600 1rem "Cairo",sans-serif;cursor:pointer}
+.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+@media (prefers-reduced-motion:reduce){.pop,.shake{animation:none}}

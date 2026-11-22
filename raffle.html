@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Draw</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+main.stage{max-width:1100px;margin:auto;text-align:center;padding:4vh 20px;display:block}
+.stage h1{font-size:clamp(1.6rem,4vw,3rem);color:var(--gold-2);font-weight:800;margin:0 0 4px}
+.stage .sub{color:var(--muted);font-size:clamp(1rem,2vw,1.4rem)}
+#name{font-size:clamp(2.2rem,9vw,7rem);font-weight:800;min-height:1.3em;margin:5vh 0 1vh;line-height:1.2;color:var(--paper)}
+#name.win{color:var(--gold-2);text-shadow:0 0 40px rgba(236,210,139,.55);animation:pop .6s cubic-bezier(.2,1.6,.4,1)}
+#meta{font-size:clamp(1.1rem,2.6vw,2rem);color:var(--gold);min-height:1.4em;direction:ltr}
+#go{max-width:420px;margin:5vh auto 3vh;font-size:1.6rem;padding:18px}
+#won{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+#won li{border:1px solid rgba(201,162,75,.5);border-radius:999px;padding:6px 16px;color:var(--gold-2)}
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1>✈ Around the World in One Day</h1>
+  <p id="count" class="sub">…</p>
+  <div id="name">—</div>
+  <div id="meta"></div>
+  <button id="go" class="gold" type="button">DRAW · اسحب</button>
+  <ol id="won"></ol>
+</main>
+<script type="module">
+import { db, gate, sfx, COUNTRIES } from "./common.js";
+import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+await gate();
+const $ = (s) => document.querySelector(s);
+let entries = [], won = new Map(), busy = false;
+
+function render() {
+  const left = entries.filter((e) => !won.has(e.id)).length;
+  $("#count").textContent = `Entries: ${entries.length} · Remaining: ${left} · Winners: ${won.size}`;
+  $("#won").replaceChildren(...[...won.values()].sort((a, b) => (a.at?.seconds || 0) - (b.at?.seconds || 0))
+    .map((w) => Object.assign(document.createElement("li"), { textContent: w.name })));
+}
+onSnapshot(query(collection(db, "students"), where("entered", "==", true)),
+  (s) => { entries = s.docs.map((d) => ({ id: d.id, ...d.data() })); render(); });
+onSnapshot(collection(db, "draws"),
+  (s) => { won = new Map(s.docs.map((d) => [d.id, d.data()])); render(); });
+
+async function draw() {
+  const pool = entries.filter((e) => !won.has(e.id));
+  if (busy) return;
+  if (!pool.length) { $("#name").textContent = "No more entries"; return; }
+  busy = true; $("#go").disabled = true; $("#name").classList.remove("win"); $("#meta").textContent = "";
+  const pick = pool[crypto.getRandomValues(new Uint32Array(1))[0] % pool.length];
+  const start = Date.now(); let i = 0;
+  await new Promise((resolve) => {
+    const step = () => {
+      const el = Date.now() - start;
+      if (el >= 4500) return resolve();
+      $("#name").textContent = pool[Math.floor(Math.random() * pool.length)].name;
+      if (i++ % 2 === 0) sfx("tick");
+      setTimeout(step, 60 + el / 28);
+    };
+    step();
+  });
+  $("#name").textContent = pick.name; $("#name").classList.add("win");
+  $("#meta").textContent = `${pick.id} · ${pick.major || ""}`;
+  sfx("chime");
+  try { await setDoc(doc(db, "draws", pick.id), { id: pick.id, name: pick.name, at: serverTimestamp() }); } catch (e) { console.error(e); }
+  busy = false; $("#go").disabled = false;
+}
+$("#go").addEventListener("click", draw);
+addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventDefault(); draw(); } });
+</script>
+</body>
+</html>

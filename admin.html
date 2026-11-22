@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+main.adm{display:block;max-width:760px;margin:auto;padding:20px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
+.card{border:1px solid rgba(201,162,75,.5);border-radius:14px;padding:14px;background:var(--navy)}
+.card b{display:block;font-size:2rem;color:var(--gold-2);line-height:1.1}
+.card span{color:var(--muted);font-size:.9rem}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+td,th{padding:8px 6px;border-bottom:1px solid rgba(201,162,75,.25);text-align:start;font-size:.95rem}
+th{color:var(--gold-2)}
+</style>
+</head>
+<body>
+<main class="adm">
+  <h2>Admin · لوحة المنظمين</h2>
+  <div class="grid" id="top"></div>
+  <h3>Stamps per country</h3>
+  <div class="grid" id="byc"></div>
+  <h3>Latest registrations</h3>
+  <table><thead><tr><th>Passport</th><th>Name</th><th>Stamps</th><th>Draw</th></tr></thead><tbody id="rows"></tbody></table>
+</main>
+<script type="module">
+import { db, gate, COUNTRIES, esc } from "./common.js";
+import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+await gate();
+const $ = (s) => document.querySelector(s);
+const card = (n, l) => `<div class="card"><b>${n}</b><span>${l}</span></div>`;
+onSnapshot(collection(db, "students"), (s) => {
+  const r = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const st = (x) => x.stamps || [];
+  $("#top").innerHTML = card(r.length, "Registered") + card(r.filter((x) => st(x).length === 5).length, "Completed 5 stamps")
+    + card(r.filter((x) => x.entered).length, "In the final draw") + card(r.filter((x) => st(x).length > 0).length, "Got at least 1 stamp");
+  $("#byc").innerHTML = COUNTRIES.map((c) => card(r.filter((x) => st(x).includes(c.id)).length, `${c.flag} ${c.en}`)).join("");
+  $("#rows").innerHTML = r.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 20)
+    .map((x) => `<tr><td>${esc(x.id)}</td><td>${esc(x.name)}</td><td>${st(x).length}/5</td><td>${x.entered ? "✓" : ""}</td></tr>`).join("");
+});
+</script>
+</body>
+</html>
