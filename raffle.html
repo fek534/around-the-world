@@ -19,6 +19,7 @@ main.stage{max-width:1100px;margin:auto;text-align:center;padding:4vh 20px;displ
 </style>
 </head>
 <body>
+<button id="out" class="lang out" type="button">Log out</button>
 <main class="stage">
   <h1>✈ Around the World in One Day</h1>
   <p id="count" class="sub">…</p>
@@ -28,11 +29,12 @@ main.stage{max-width:1100px;margin:auto;text-align:center;padding:4vh 20px;displ
   <ol id="won"></ol>
 </main>
 <script type="module">
-import { db, gate, sfx, COUNTRIES } from "./common.js";
+import { db, gate, sfx, logout } from "./common.js";
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 await gate();
 const $ = (s) => document.querySelector(s);
+$("#out").onclick = logout;
 let entries = [], won = new Map(), busy = false;
 
 function render() {

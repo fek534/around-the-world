@@ -1,4 +1,5 @@
-import { db, COUNTRIES, PIN_HASH, sha, sfx } from "./common.js";
+import { db, auth, isAdmin, logout, COUNTRIES, PIN_HASH, sha, sfx } from "./common.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -15,7 +16,9 @@ const T = {
     tapHint: "اضغط على الدولة وأدخل رمز الختم من المنظم.",
     ready: "جمعت الأختام الخمسة! ادخل السحب الآن.", inDraw: "أنت داخل السحب النهائي. حظ سعيد!",
     draw: "ادخل السحب النهائي", pinFor: "رمز", badPin: "الرمز غير صحيح.",
-    locked: "محاولات كتير. استنى 30 ثانية."
+    locked: "محاولات كتير. استنى 30 ثانية.",
+    logout: "تسجيل الخروج", have: "عندي باسبور", staff: "دخول المنظمين", loginTitle: "افتح باسبورك",
+    login: "دخول", back: "رجوع", eLogin: "رقم الباسبور أو الموبايل غير صحيح."
   },
   en: {
     title: "Digital Passport", tag: "Around the World in One Day", begin: "Begin the journey",
@@ -28,7 +31,9 @@ const T = {
     tapHint: "Tap a country and enter the stamp code from the organizer.",
     ready: "All 5 stamps collected! Enter the draw now.", inDraw: "You are in the final draw. Good luck!",
     draw: "Enter the final draw", pinFor: "Code for", badPin: "Wrong code.",
-    locked: "Too many tries. Wait 30 seconds."
+    locked: "Too many tries. Wait 30 seconds.",
+    logout: "Log out", have: "I have a passport", staff: "Organizers", loginTitle: "Open your passport",
+    login: "Log in", back: "Back", eLogin: "Passport or mobile number is wrong."
   }
 };
 
@@ -69,6 +74,7 @@ function renderPassport() {
   btn.textContent = t.draw;
   btn.hidden = student.entered || got.length < 5;
   show("passport");
+  refreshOut();
 }
 
 function validate() {
@@ -87,12 +93,13 @@ $("#regForm").addEventListener("submit", async (e) => {
   if (v.error) { err.textContent = v.error; return; }
   err.textContent = ""; btn.disabled = true; btn.textContent = T[lang].wait;
   try {
+    const ph = await sha(v.phone);
     let id, tries = 0;
     for (;;) {
       id = `PASS-${YEAR}-${1000 + Math.floor(Math.random() * 9000)}`;
       try {
         const b = writeBatch(db);
-        b.set(doc(db, "students", id), { name: v.name, major: v.major, year: v.year, stamps: [], entered: false, lang, createdAt: serverTimestamp() });
+        b.set(doc(db, "students", id), { name: v.name, major: v.major, year: v.year, stamps: [], entered: false, lang, ph, createdAt: serverTimestamp() });
         b.set(doc(db, "contacts", id), { id, phone: v.phone });
         await b.commit();
         break;
@@ -166,6 +173,24 @@ async function restore() {
     }
   } catch (_) {}
 }
+
+$("#haveBtn").addEventListener("click", () => { $("#lErr").textContent = ""; show("login"); });
+$("#lBack").addEventListener("click", () => show("splash"));
+$("#loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = $("#lId").value.trim().toUpperCase(), phone = $("#lPhone").value.replace(/[\s-]/g, ""), err = $("#lErr");
+  try {
+    const snap = await getDoc(doc(db, "students", id));
+    if (!snap.exists() || snap.data().ph !== (await sha(phone))) { err.textContent = T[lang].eLogin; return; }
+    const d = snap.data();
+    student = { id, name: d.name, major: d.major, year: d.year, stamps: d.stamps || [], entered: !!d.entered };
+    store.set("passportId", id);
+    renderPassport();
+  } catch (e2) { err.textContent = `${T[lang].eNet} (${e2.code || e2.message})`; }
+});
+$("#outBtn").addEventListener("click", logout);
+function refreshOut() { $("#outBtn").hidden = !(student || isAdmin(auth.currentUser)); }
+onAuthStateChanged(auth, refreshOut);
 
 applyLang();
 restore();

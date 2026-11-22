@@ -95,3 +95,7 @@ h3{font-size:1.1rem;color:var(--gold-2)}
 .shake{animation:shake .35s}
 @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 @media (prefers-reduced-motion:reduce){.pop,.shake{animation:none}}
+
+.out{inset-inline-end:auto;inset-inline-start:14px}
+a.ghost{text-align:center;text-decoration:none}
+.cover .ghost{margin-top:8px}
