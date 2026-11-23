@@ -15,13 +15,13 @@ export const auth = getAuth(app);
 
 export const COUNTRIES = [
   { id: "korea",   flag: "🇰🇷", ar: "كوريا",   en: "Korea" },
-  { id: "lebanon", flag: "🇱🇧", ar: "لبنان",   en: "Lebanon" },
+  { id: "italy",   flag: "🇮🇹", ar: "إيطاليا", en: "Italy" },
   { id: "france",  flag: "🇫🇷", ar: "فرنسا",   en: "France" },
   { id: "turkey",  flag: "🇹🇷", ar: "تركيا",   en: "Türkiye" },
   { id: "spain",   flag: "🇪🇸", ar: "إسبانيا", en: "Spain" }
 ];
 
-export const PIN_HASH = { korea: "1746543e87553b36a617fe9532b5ef425288f06459efec27c3379e7e73bf324a", lebanon: "7a1f84113416c825d90a5dbaae6604d5190fbd70941f6a85bfd9dda237146be1", france: "fab1d73fc9741cdcad5c780210bd4312313254866c60a01599e3596ea70bf95c", turkey: "df4d536166bca198c9f22faa104a6d59912b461ed82acf307cb7b7fdad4b9391", spain: "aa8e78f9c1199da57d08b181641b1ae4cf689f50c94e440147a4cb47ded4339f" };
+export const PIN_HASH = { korea: "1746543e87553b36a617fe9532b5ef425288f06459efec27c3379e7e73bf324a", italy: "12d60fa12cddcae3aa273ab61c422bf1f1cc75ff70ca53aa8873067d7b83a1d2", france: "fab1d73fc9741cdcad5c780210bd4312313254866c60a01599e3596ea70bf95c", turkey: "df4d536166bca198c9f22faa104a6d59912b461ed82acf307cb7b7fdad4b9391", spain: "aa8e78f9c1199da57d08b181641b1ae4cf689f50c94e440147a4cb47ded4339f" };
 export const ADMIN_EMAIL = "admin@around-the-world.app";
 export const isAdmin = (u) => !!u && u.email === ADMIN_EMAIL;
 
@@ -75,4 +75,51 @@ export async function gate() {
     };
     inp.focus();
   });
+}
+
+/* ---------- lucky wheel ---------- */
+export const PRIZES = [
+  { id: "card",     ar: "كرت شحن",       en: "Recharge card",  w: 19 },
+  { id: "vip",      ar: "VIP",           en: "VIP",            w: 5 },
+  { id: "hohos",    ar: "كيكة هوهوز",    en: "Hohos cake",     w: 19 },
+  { id: "choco",    ar: "ميكس شكولاتة",  en: "Chocolate mix",  w: 19 },
+  { id: "gameover", ar: "Game Over",     en: "Game Over",      w: 19 },
+  { id: "twist",    ar: "Twist",         en: "Twist",          w: 19 }
+];
+const rnd = () => crypto.getRandomValues(new Uint32Array(1))[0];
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export function pickWeighted(list) {
+  let r = (rnd() / 2 ** 32) * list.reduce((a, x) => a + x.w, 0);
+  for (const x of list) { if (x.w > 0 && r < x.w) return x; r -= x.w; }
+  return list.find((x) => x.w > 0);
+}
+export function shuffle(a) {
+  a = [...a];
+  for (let i = a.length - 1; i > 0; i--) { const j = rnd() % (i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+export function drawWheel(cv, labels, showText = true) {
+  const n = labels.length, S = (cv.width = cv.height = 320), c = S / 2, a = (2 * Math.PI) / n, x = cv.getContext("2d");
+  const cols = ["#c9a24b", "#12285a", "#ecd28b", "#1d3a7a"];
+  x.clearRect(0, 0, S, S);
+  labels.forEach((t, i) => {
+    x.beginPath(); x.moveTo(c, c);
+    x.arc(c, c, c - 4, -Math.PI / 2 + i * a, -Math.PI / 2 + (i + 1) * a); x.closePath();
+    x.fillStyle = cols[i % 4]; x.fill(); x.strokeStyle = "#0a1a3d"; x.lineWidth = 2; x.stroke();
+    if (showText) {
+      x.save(); x.translate(c, c); x.rotate(-Math.PI / 2 + (i + 0.5) * a);
+      x.textAlign = "right"; x.fillStyle = i % 4 % 2 ? "#f4ecd6" : "#0a1a3d";
+      x.font = "700 15px Cairo, sans-serif"; x.fillText(t, c - 18, 5); x.restore();
+    }
+  });
+  cv.style.transition = "none"; cv.style.transform = "rotate(0deg)"; cv.dataset.rot = "0";
+}
+export async function spinTo(cv, index, n, ms = 5200) {
+  const seg = 360 / n, prev = +cv.dataset.rot || 0;
+  const need = ((((-(index + 0.5) * seg + (Math.random() - 0.5) * seg * 0.5) - prev) % 360) + 360) % 360;
+  const R = prev + 360 * 6 + need;
+  void cv.offsetWidth;
+  cv.style.transition = `transform ${ms}ms cubic-bezier(.12,.7,.1,1)`;
+  cv.style.transform = `rotate(${R}deg)`; cv.dataset.rot = String(R);
+  await sleep(ms + 150);
 }

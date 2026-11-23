@@ -9,44 +9,101 @@
 <style>
 main.adm{display:block;max-width:760px;margin:auto;padding:56px 16px 30px}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}
-.card{border:1px solid rgba(201,162,75,.5);border-radius:14px;padding:14px;background:var(--navy)}
+.card{border:1px solid rgba(201,162,75,.5);border-radius:14px;padding:14px;background:var(--navy);margin-bottom:12px}
+.grid .card{margin:0}
 .card b.n{display:block;font-size:2rem;color:var(--gold-2);line-height:1.1}
-.card span{color:var(--muted);font-size:.9rem}
-#q{margin:10px 0}
-.st{margin-bottom:10px}
-.st b{font-size:1.1rem}
+.card span,.sub{color:var(--muted);font-size:.9rem}
+h3{margin:0 0 8px}
+#q{margin:6px 0 12px}
 .chips,.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .chip,.acts button{border:1px solid var(--gold);background:transparent;color:var(--paper);border-radius:999px;padding:6px 12px;font:600 .9rem "Cairo",sans-serif;cursor:pointer}
 .chip{font-size:1.2rem;opacity:.4;filter:grayscale(1)}
 .chip.on{opacity:1;filter:none;background:rgba(201,162,75,.2)}
 .acts .del{border-color:var(--bad);color:var(--bad)}
 .ph{display:block;margin-top:8px;direction:ltr;color:var(--gold-2)}
+#feed{list-style:none;padding:0;margin:12px 0 0;font-size:.95rem}
+#feed li{padding:4px 0;border-bottom:1px solid rgba(201,162,75,.2)}
+#rlist{list-style:none;padding:0;margin:8px 0 0}
+#rlist li{padding:8px 0;border-bottom:1px solid rgba(201,162,75,.2)}
+#rlist b{color:var(--gold-2)}
+table{width:100%;border-collapse:collapse}
+td,th{padding:8px 6px;border-bottom:1px solid rgba(201,162,75,.25);text-align:start;font-size:.95rem}
+th{color:var(--gold-2)}
+.toast{position:fixed;top:60px;inset-inline:16px;max-width:420px;margin:auto;z-index:20;background:var(--gold);color:var(--navy-2);border-radius:14px;padding:12px 16px;font-weight:800;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.toast[hidden]{display:none}
 </style>
 </head>
 <body>
 <button id="out" class="lang out" type="button">Log out</button>
+<div id="toast" class="toast" hidden></div>
 <main class="adm">
   <h2>Admin · لوحة المنظمين</h2>
   <div class="grid" id="top"></div>
   <div class="grid" id="byc"></div>
+
+  <section class="card" style="text-align:center">
+    <h3>🎡 Lucky wheel · عجلة الحظ</h3>
+    <div class="wheelwrap"><canvas id="ew"></canvas></div>
+    <p id="ecount" class="sub"></p>
+    <button id="extract" class="gold" type="button">Extract 10 random · استخرج 10 عشوائيين</button>
+    <button id="reset" class="ghost" type="button">Reset draw (testing only)</button>
+    <ul id="feed" style="text-align:start"></ul>
+  </section>
+
+  <section class="card">
+    <h3>🏆 Winners · الفائزين</h3>
+    <table><thead><tr><th>Name</th><th>Prize</th><th></th></tr></thead><tbody id="wins"></tbody></table>
+  </section>
+
+  <section class="card">
+    <h3>⭐ Ratings · التقييمات</h3>
+    <p id="ravg" class="sub"></p>
+    <ul id="rlist"></ul>
+  </section>
+
+  <h3>Accounts · الحسابات</h3>
   <input id="q" placeholder="Search name / passport / major · ابحث" autocomplete="off">
   <div id="list"></div>
 </main>
 <script type="module">
-import { db, gate, logout, COUNTRIES, esc } from "./common.js";
+import { db, gate, logout, COUNTRIES, PRIZES, pickWeighted, shuffle, drawWheel, spinTo, sfx, esc } from "./common.js";
 import { collection, onSnapshot, doc, getDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 await gate();
 const $ = (s) => document.querySelector(s);
 $("#out").onclick = logout;
-let rows = [];
 const st = (x) => x.stamps || [];
 const card = (n, l) => `<div class="card"><b class="n">${n}</b><span>${l}</span></div>`;
+let rows = [], wheel = new Map(), first = true, lastSig = "", entrants = [];
+const seen = new Set();
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 5000);
+}
+const prizeText = (w) => { const p = PRIZES.find((x) => x.id === w.main); return p ? `${p.ar} / ${p.en}` : "—"; };
 
 function renderStats() {
-  $("#top").innerHTML = card(rows.length, "Registered") + card(rows.filter((x) => st(x).length === 5).length, "Completed 5 stamps")
-    + card(rows.filter((x) => x.entered).length, "In the final draw") + card(rows.filter((x) => st(x).length > 0).length, "Got 1+ stamp");
+  $("#top").innerHTML = card(rows.length, "Registered") + card(rows.filter((x) => st(x).length === 5).length, "Completed all stamps")
+    + card(entrants.length, "In the lucky wheel") + card(wheel.size, "Selected winners");
   $("#byc").innerHTML = COUNTRIES.map((c) => card(rows.filter((x) => st(x).includes(c.id)).length, `${c.flag} ${c.en}`)).join("");
+}
+function renderWheel() {
+  entrants = rows.filter((x) => x.entered).sort((a, b) => (a.enteredAt?.seconds || 0) - (b.enteredAt?.seconds || 0));
+  const sig = entrants.map((x) => x.id).join();
+  if (sig !== lastSig) {
+    lastSig = sig;
+    const labels = entrants.length ? entrants.map((x) => (x.name.length > 12 ? x.name.slice(0, 11) + "…" : x.name)) : ["—"];
+    drawWheel($("#ew"), labels, labels.length <= 24);
+  }
+  $("#ecount").textContent = `${entrants.length} in the wheel · ${wheel.size} selected`;
+  $("#extract").disabled = wheel.size > 0 || entrants.length === 0;
+  $("#feed").innerHTML = [...entrants].reverse().slice(0, 8).map((x) => `<li>🎉 ${esc(x.name)} <span class="sub">· ${esc(x.id)}</span></li>`).join("");
+}
+function renderWins() {
+  $("#wins").innerHTML = [...wheel.values()].map((w) =>
+    `<tr><td>${esc(w.name)}<br><span class="sub">${esc(w.id)}</span></td><td>${esc(w.spun ? prizeText(w) : "—")}</td><td>${w.spun ? "✓" : "⏳"}</td></tr>`).join("")
+    || `<tr><td colspan="3" class="sub">No winners yet</td></tr>`;
 }
 function renderList() {
   const q = $("#q").value.trim().toLowerCase();
@@ -55,13 +112,57 @@ function renderList() {
   $("#list").innerHTML = r.slice(0, 30).map((x) => `<div class="card st" data-id="${esc(x.id)}">
     <b>${esc(x.name)}</b><br><span>${esc(x.id)} · ${esc(x.major)} · ${st(x).length}/5</span>
     <div class="chips">${COUNTRIES.map((c) => `<button class="chip ${st(x).includes(c.id) ? "on" : ""}" data-act="stamp" data-c="${c.id}" title="${c.en}">${c.flag}</button>`).join("")}</div>
-    <div class="acts"><button data-act="entered">${x.entered ? "Remove from draw" : "Add to draw"}</button>
+    <div class="acts"><button data-act="entered">${x.entered ? "Remove from wheel" : "Add to wheel"}</button>
       <button data-act="phone">Phone</button><button class="del" data-act="del">Delete</button></div>
     <span class="ph"></span></div>`).join("");
 }
-onSnapshot(collection(db, "students"), (s) => { rows = s.docs.map((d) => ({ id: d.id, ...d.data() })); renderStats(); renderList(); },
-  (e) => { $("#list").textContent = `Error: ${e.code}`; });
+
+onSnapshot(collection(db, "students"), (s) => {
+  rows = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+  rows.forEach((x) => {
+    if (x.entered) { if (!seen.has(x.id) && !first) { toast(`🎉 ${x.name} entered the draw · دخل السحب`); sfx("chime"); } seen.add(x.id); }
+    else seen.delete(x.id);
+  });
+  first = false; renderWheel(); renderStats(); renderList();
+}, (e) => { $("#list").textContent = `Error: ${e.code}`; });
+onSnapshot(collection(db, "wheel"), (s) => {
+  wheel = new Map(s.docs.map((d) => [d.id, d.data()])); renderWheel(); renderStats(); renderWins();
+}, () => {});
+let rFirst = true;
+onSnapshot(collection(db, "ratings"), (s) => {
+  const r = s.docs.map((d) => d.data()).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  const avg = r.length ? (r.reduce((a, x) => a + x.stars, 0) / r.length).toFixed(2) : "—";
+  $("#ravg").textContent = `${r.length} ratings · average ${avg} / 5`;
+  $("#rlist").innerHTML = r.map((x) => `<li><b>${"★".repeat(x.stars)}${"☆".repeat(5 - x.stars)}</b> ${esc(x.name)}${x.comment ? `<br><span class="sub">${esc(x.comment)}</span>` : ""}</li>`).join("");
+  if (!rFirst) s.docChanges().forEach((c) => { if (c.type === "added") { toast(`⭐ ${c.doc.data().name}: ${c.doc.data().stars}/5`); } });
+  rFirst = false;
+}, () => {});
 $("#q").addEventListener("input", renderList);
+
+$("#extract").addEventListener("click", async () => {
+  const pool = entrants.filter((x) => !wheel.has(x.id));
+  if (!pool.length || wheel.size) return;
+  $("#extract").disabled = true;
+  try {
+    await spinTo($("#ew"), Math.floor(Math.random() * entrants.length), entrants.length, 4500);
+    const b = writeBatch(db);
+    shuffle(pool).slice(0, 10).forEach((x) => {
+      const main = pickWeighted(PRIZES).id;
+      b.set(doc(db, "wheel", x.id), { id: x.id, name: x.name, main, spun: false, createdAt: serverTimestamp() });
+    });
+    b.set(doc(db, "meta", "draw"), { done: true, at: serverTimestamp() });
+    await b.commit(); sfx("chime");
+  } catch (e) { alert(e.code || e.message); $("#extract").disabled = false; }
+});
+$("#reset").addEventListener("click", async () => {
+  if (!confirm("Reset the draw? Selected winners and prizes will be deleted.") || !confirm("Are you sure?")) return;
+  try {
+    const b = writeBatch(db);
+    wheel.forEach((_, id) => b.delete(doc(db, "wheel", id)));
+    b.delete(doc(db, "meta", "draw"));
+    await b.commit();
+  } catch (e) { alert(e.code || e.message); }
+});
 
 $("#list").addEventListener("click", async (e) => {
   const b = e.target.closest("button"), box = e.target.closest(".st");
@@ -78,7 +179,8 @@ $("#list").addEventListener("click", async (e) => {
       box.querySelector(".ph").textContent = p.exists() ? p.data().phone : "—";
     } else if (b.dataset.act === "del" && confirm(`Delete ${x.name} (${id})?`)) {
       const w = writeBatch(db);
-      w.delete(ref); w.delete(doc(db, "contacts", id)); w.delete(doc(db, "draws", id));
+      w.delete(ref); w.delete(doc(db, "contacts", id)); w.delete(doc(db, "wheel", id)); w.delete(doc(db, "ratings", id));
+      if (x.ph) w.delete(doc(db, "phones", x.ph));
       await w.commit();
     }
   } catch (err) { alert(err.code || err.message); }
