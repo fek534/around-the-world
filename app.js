@@ -1,4 +1,4 @@
-import { db, auth, isAdmin, logout, COUNTRIES, PIN_HASH, PRIZES, drawWheel, spinTo, sleep, sha, sfx, confetti, esc, shrink } from "./common.js";
+import { db, auth, isAdmin, logout, COUNTRIES, PIN_HASH, PRIZES, drawWheel, spinTo, sleep, sha, sfx, confetti, esc, shrink, tune } from "./common.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { collection, doc, getDoc, setDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp, onSnapshot }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -26,7 +26,8 @@ const T = {
     rated: "شكراً على تقييمك! ⭐", ePick: "اختار عدد النجوم.",
     special: "يا {n} 💛 العجلة مختارتكش المرة دي، بس إنت كسبت رحلة حوالين العالم في يوم واحد! حضورك وحماسك هما الجايزة الحقيقية. نشوفك في الإيفنت الجاي 🌍✨",
     memTitle: "📸 ذكرياتي", memHint: "الصور دي يشوفها إنت والمنظمين بس.", memCam: "📷 التقط صورة", memPick: "🖼 اختر من المعرض",
-    memShared: "من المنظمين", memFull: "وصلت للحد الأقصى (12 صورة).", memWait: "جاري الحفظ..."
+    memShared: "من المنظمين", memFull: "وصلت للحد الأقصى (12 صورة).", memWait: "جاري الحفظ...",
+    skip: "تخطي", introGo: "▶ اضغط للبدء"
   },
   en: {
     title: "Digital Passport", tag: "Around the World in One Day", begin: "Begin the journey",
@@ -48,7 +49,8 @@ const T = {
     rated: "Thanks for your rating! ⭐", ePick: "Pick a star rating.",
     special: "Dear {n} 💛 the wheel did not pick you this time, but you won a trip around the world in one day! Your energy was the real prize. See you at the next event 🌍✨",
     memTitle: "📸 My memories", memHint: "Only you and the organizers can see these photos.", memCam: "📷 Take a photo", memPick: "🖼 Choose from gallery",
-    memShared: "From the organizers", memFull: "You reached the limit (12 photos).", memWait: "Saving..."
+    memShared: "From the organizers", memFull: "You reached the limit (12 photos).", memWait: "Saving...",
+    skip: "Skip", introGo: "▶ Tap to start"
   }
 };
 
@@ -81,7 +83,14 @@ let lang = store.get("lang") || "ar";
 let student = null, pinFor = null, fails = 0, lockUntil = 0, lastPop = null;
 let wheelDoc = null, drawDone = false, unsubs = [], spinning = false;
 
-const show = (id) => document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
+const BGSCREENS = ["splash", "register", "login"];
+const show = (id) => {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
+  const intro = document.body.classList.contains("intro");
+  const bg = BGSCREENS.includes(id) && !intro;
+  document.body.classList.toggle("vbg", bg);
+  if (bg) vid.play().catch(() => {}); else if (!intro) vid.pause();
+};
 
 function finalLabel(w) {
   return `${T[lang].won} ${PRIZES.find((p) => p.id === w.main)[lang]}`;
@@ -327,12 +336,33 @@ $("#gallery").addEventListener("click", (e) => { const im = e.target.closest("im
 $("#lb").addEventListener("click", () => { $("#lb").hidden = true; });
 
 /* background music + ambient motion */
-const bgm = $("#bgm"); bgm.volume = 0.3;
-let muted = store.get("muted") === "1", started = false;
-const syncMute = () => { $("#muteBtn").textContent = muted ? "🔇" : "🔊"; if (muted) bgm.pause(); else if (started) bgm.play().catch(() => {}); };
-addEventListener("pointerdown", () => { if (started) return; started = true; if (!muted) bgm.play().catch(() => {}); }, { once: true });
-$("#muteBtn").addEventListener("click", () => { muted = !muted; store.set("muted", muted ? "1" : "0"); started = true; syncMute(); });
-syncMute();
+const vid = $("#vid");
+let muted = store.get("muted") === "1", gestured = false, introActive = true;
+const maybeTune = () => { if (gestured && !introActive) tune(!muted); };
+const syncMute = () => { $("#muteBtn").textContent = muted ? "🔇" : "🔊"; maybeTune(); };
+addEventListener("pointerdown", () => { gestured = true; maybeTune(); }, { once: true });
+$("#muteBtn").addEventListener("click", () => { muted = !muted; store.set("muted", muted ? "1" : "0"); syncMute(); });
+
+function endIntro() {
+  if (!introActive && !document.body.classList.contains("intro")) return;
+  introActive = false;
+  try { sessionStorage.setItem("intro", "1"); } catch (_) {}
+  vid.muted = true; vid.loop = true;
+  document.body.classList.remove("intro");
+  show(document.querySelector(".screen.active")?.id || "splash");
+  syncMute();
+}
+async function startIntro() {
+  document.body.classList.add("intro");
+  vid.preload = "auto"; vid.muted = false; vid.loop = false;
+  vid.addEventListener("ended", endIntro, { once: true });
+  vid.addEventListener("error", endIntro, { once: true });
+  try { await vid.play(); } catch { $("#introGo").hidden = false; }
+}
+$("#introGo").addEventListener("click", async () => {
+  $("#introGo").hidden = true; gestured = true; vid.muted = false;
+  try { await vid.play(); } catch { endIntro(); }
+});
 (function fx() {
   const f = document.createElement("div"); f.id = "fx"; f.setAttribute("aria-hidden", "true");
   const plane = '<svg class="flyby" viewBox="0 0 24 24"><path fill="currentColor" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>';
@@ -349,4 +379,5 @@ function refreshOut() { $("#outBtn").hidden = !(student || isAdmin(auth.currentU
 onAuthStateChanged(auth, refreshOut);
 
 applyLang();
+startIntro();
 (async () => { const id = store.get("passportId"); if (id) { try { await loadStudent(id); } catch (_) {} } })();

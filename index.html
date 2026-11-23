@@ -6,10 +6,15 @@
 <meta name="theme-color" content="#0a1a3d">
 <title>Digital Passport · جواز السفر الرقمي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="intro">
+<video id="vid" src="intro.mp4" poster="intro.jpg" playsinline webkit-playsinline preload="auto" autoplay></video>
+<div id="vidShade"></div>
+<div id="introUI">
+  <button id="introGo" class="gold" type="button" data-i="introGo" hidden>▶ اضغط للبدء</button>
+</div>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="logo" viewBox="0 0 100 100">
@@ -26,7 +31,6 @@
 <button id="langBtn" class="lang" type="button">EN</button>
 <button id="outBtn" class="lang out" type="button" data-i="logout" hidden>تسجيل الخروج</button>
 <button id="muteBtn" class="lang mute" type="button" aria-label="music">🔊</button>
-<audio id="bgm" src="music.mp3" loop preload="none"></audio>
 
 <main>
   <!-- Splash -->

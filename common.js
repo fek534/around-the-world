@@ -32,6 +32,11 @@ export const sha = async (s) => [...new Uint8Array(await crypto.subtle.digest("S
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 let ac;
+export function audioCtx() {
+  ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === "suspended") ac.resume();
+  return ac;
+}
 export function sfx(kind) {
   try {
     ac = ac || new (window.AudioContext || window.webkitAudioContext)();
@@ -149,4 +154,42 @@ export async function shrink(file, max = 900) {
   let d = cv.toDataURL("image/jpeg", 0.72);
   if (d.length > 420000) d = cv.toDataURL("image/jpeg", 0.5);
   return d;
+}
+
+/* ---------- calm generated tune (no audio file) ---------- */
+let master, tuneTimer;
+export function tune(on) {
+  try {
+    const a = audioCtx();
+    if (!master) {
+      master = a.createGain(); master.gain.value = 0;
+      const lp = a.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1700;
+      const d = a.createDelay(); d.delayTime.value = 0.45;
+      const fb = a.createGain(); fb.gain.value = 0.4;
+      master.connect(lp); lp.connect(a.destination); lp.connect(d); d.connect(fb); fb.connect(d); d.connect(a.destination);
+    }
+    const note = (f, t, dur, v) => {
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.12); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.1);
+    };
+    const scale = [261.63, 293.66, 329.63, 392, 440, 523.25, 587.33], pad = [130.81, 196, 261.63];
+    master.gain.cancelScheduledValues(a.currentTime);
+    if (on) {
+      master.gain.linearRampToValueAtTime(1, a.currentTime + 2);
+      if (!tuneTimer) {
+        let i = 0;
+        const tick = () => {
+          const t = a.currentTime + 0.05;
+          note(scale[(Math.random() * scale.length) | 0], t, 2.6, 0.05);
+          if (i++ % 8 === 0) pad.forEach((f) => note(f, t, 8, 0.022));
+        };
+        tick(); tuneTimer = setInterval(tick, 1000);
+      }
+    } else {
+      master.gain.linearRampToValueAtTime(0, a.currentTime + 0.6);
+      clearInterval(tuneTimer); tuneTimer = null;
+    }
+  } catch (_) {}
 }
