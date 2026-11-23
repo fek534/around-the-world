@@ -18,10 +18,11 @@ export const COUNTRIES = [
   { id: "italy",   flag: "🇮🇹", ar: "إيطاليا", en: "Italy" },
   { id: "france",  flag: "🇫🇷", ar: "فرنسا",   en: "France" },
   { id: "turkey",  flag: "🇹🇷", ar: "تركيا",   en: "Türkiye" },
-  { id: "spain",   flag: "🇪🇸", ar: "إسبانيا", en: "Spain" }
+  { id: "spain",   flag: "🇪🇸", ar: "إسبانيا", en: "Spain" },
+  { id: "germany", flag: "🇩🇪", ar: "ألمانيا", en: "Germany" }
 ];
 
-export const PIN_HASH = { korea: "1746543e87553b36a617fe9532b5ef425288f06459efec27c3379e7e73bf324a", italy: "12d60fa12cddcae3aa273ab61c422bf1f1cc75ff70ca53aa8873067d7b83a1d2", france: "fab1d73fc9741cdcad5c780210bd4312313254866c60a01599e3596ea70bf95c", turkey: "df4d536166bca198c9f22faa104a6d59912b461ed82acf307cb7b7fdad4b9391", spain: "aa8e78f9c1199da57d08b181641b1ae4cf689f50c94e440147a4cb47ded4339f" };
+export const PIN_HASH = { korea: "1746543e87553b36a617fe9532b5ef425288f06459efec27c3379e7e73bf324a", italy: "12d60fa12cddcae3aa273ab61c422bf1f1cc75ff70ca53aa8873067d7b83a1d2", france: "fab1d73fc9741cdcad5c780210bd4312313254866c60a01599e3596ea70bf95c", turkey: "df4d536166bca198c9f22faa104a6d59912b461ed82acf307cb7b7fdad4b9391", spain: "aa8e78f9c1199da57d08b181641b1ae4cf689f50c94e440147a4cb47ded4339f", germany: "4f93b25f5909fd7552151fda02f1023c7710aef35b755b07fcde53072d7d9e5d" }
 export const ADMIN_EMAIL = "admin@around-the-world.app";
 export const isAdmin = (u) => !!u && u.email === ADMIN_EMAIL;
 
@@ -122,4 +123,30 @@ export async function spinTo(cv, index, n, ms = 5200) {
   cv.style.transition = `transform ${ms}ms cubic-bezier(.12,.7,.1,1)`;
   cv.style.transform = `rotate(${R}deg)`; cv.dataset.rot = String(R);
   await sleep(ms + 150);
+}
+
+/* ---------- confetti + photo shrink ---------- */
+export function confetti(n = 130) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const c = document.createElement("canvas");
+  c.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:60";
+  c.width = innerWidth; c.height = innerHeight; document.body.append(c);
+  const x = c.getContext("2d"), cols = ["#ecd28b", "#c9a24b", "#f4ecd6", "#7aa2ff", "#ff8a8a"];
+  const p = Array.from({ length: n }, () => ({ x: Math.random() * c.width, y: -20 - Math.random() * c.height * 0.5,
+    vx: (Math.random() - 0.5) * 3, vy: 2 + Math.random() * 4, s: 5 + Math.random() * 6, r: Math.random() * 6, c: cols[(Math.random() * 5) | 0] }));
+  let t = 0;
+  (function f() {
+    x.clearRect(0, 0, c.width, c.height);
+    p.forEach((q) => { q.x += q.vx; q.y += q.vy; q.r += 0.15; x.save(); x.translate(q.x, q.y); x.rotate(q.r); x.fillStyle = q.c; x.fillRect(-q.s / 2, -q.s / 4, q.s, q.s / 2); x.restore(); });
+    if (++t < 180) requestAnimationFrame(f); else c.remove();
+  })();
+}
+export async function shrink(file, max = 900) {
+  const bmp = await createImageBitmap(file), k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  let d = cv.toDataURL("image/jpeg", 0.72);
+  if (d.length > 420000) d = cv.toDataURL("image/jpeg", 0.5);
+  return d;
 }

@@ -61,13 +61,20 @@ th{color:var(--gold-2)}
     <ul id="rlist"></ul>
   </section>
 
+  <section class="card">
+    <h3>📸 Shared photos · صور لكل الحسابات</h3>
+    <div id="shared" class="album" data-album="ALL"></div>
+    <button id="addShared" class="gold" type="button">+ Add shared photo</button>
+    <input id="upShared" type="file" accept="image/*" hidden>
+  </section>
+
   <h3>Accounts · الحسابات</h3>
   <input id="q" placeholder="Search name / passport / major · ابحث" autocomplete="off">
   <div id="list"></div>
 </main>
 <script type="module">
-import { db, gate, logout, COUNTRIES, PRIZES, pickWeighted, shuffle, drawWheel, spinTo, sfx, esc } from "./common.js";
-import { collection, onSnapshot, doc, getDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, serverTimestamp }
+import { db, gate, logout, COUNTRIES, PRIZES, pickWeighted, shuffle, drawWheel, spinTo, sfx, esc, sha, shrink } from "./common.js";
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 await gate();
 const $ = (s) => document.querySelector(s);
@@ -84,7 +91,7 @@ function toast(msg) {
 const prizeText = (w) => { const p = PRIZES.find((x) => x.id === w.main); return p ? `${p.ar} / ${p.en}` : "—"; };
 
 function renderStats() {
-  $("#top").innerHTML = card(rows.length, "Registered") + card(rows.filter((x) => st(x).length === 5).length, "Completed all stamps")
+  $("#top").innerHTML = card(rows.length, "Registered") + card(rows.filter((x) => st(x).length === COUNTRIES.length).length, "Completed all stamps")
     + card(entrants.length, "In the lucky wheel") + card(wheel.size, "Selected winners");
   $("#byc").innerHTML = COUNTRIES.map((c) => card(rows.filter((x) => st(x).includes(c.id)).length, `${c.flag} ${c.en}`)).join("");
 }
@@ -110,11 +117,17 @@ function renderList() {
   let r = [...rows].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   if (q) r = r.filter((x) => `${x.name} ${x.id} ${x.major}`.toLowerCase().includes(q));
   $("#list").innerHTML = r.slice(0, 30).map((x) => `<div class="card st" data-id="${esc(x.id)}">
-    <b>${esc(x.name)}</b><br><span>${esc(x.id)} · ${esc(x.major)} · ${st(x).length}/5</span>
+    <b>${esc(x.name)}</b><br><span>${esc(x.id)} · ${esc(x.major)} · ${st(x).length}/${COUNTRIES.length}</span>
     <div class="chips">${COUNTRIES.map((c) => `<button class="chip ${st(x).includes(c.id) ? "on" : ""}" data-act="stamp" data-c="${c.id}" title="${c.en}">${c.flag}</button>`).join("")}</div>
     <div class="acts"><button data-act="entered">${x.entered ? "Remove from wheel" : "Add to wheel"}</button>
-      <button data-act="phone">Phone</button><button class="del" data-act="del">Delete</button></div>
-    <span class="ph"></span></div>`).join("");
+      <button data-act="phone">Phone</button><button data-act="photos">Photos</button><button class="del" data-act="del">Delete</button></div>
+    <span class="ph"></span>
+    <div class="album" hidden></div>
+    <div class="addrow" hidden><div class="acts"><button data-act="addp">+ Add photo to this account</button></div><input type="file" accept="image/*" class="up" hidden></div></div>`).join("");
+  opened.forEach((ak, id) => {
+    const box = $("#list").querySelector(`.st[data-id="${CSS.escape(id)}"]`);
+    if (box) { const al = box.querySelector(".album"); al.dataset.album = ak; al.hidden = false; box.querySelector(".addrow").hidden = false; showAlbum(ak, al); }
+  });
 }
 
 onSnapshot(collection(db, "students"), (s) => {
@@ -128,6 +141,39 @@ onSnapshot(collection(db, "students"), (s) => {
 onSnapshot(collection(db, "wheel"), (s) => {
   wheel = new Map(s.docs.map((d) => [d.id, d.data()])); renderWheel(); renderStats(); renderWins();
 }, () => {});
+const opened = new Map();
+const akOf = async (id) => { const p = await getDoc(doc(db, "contacts", id)); return p.exists() ? sha("album:" + p.data().phone) : null; };
+async function putPhoto(file, album) {
+  const data = await shrink(file), ref = doc(collection(db, "photos"));
+  await setDoc(ref, { data, by: "admin", createdAt: serverTimestamp() });
+  await setDoc(doc(db, "albums", album), { ids: arrayUnion(ref.id) }, { merge: true });
+}
+async function dropPhoto(album, pid) {
+  await updateDoc(doc(db, "albums", album), { ids: arrayRemove(pid) });
+  await deleteDoc(doc(db, "photos", pid));
+}
+async function showAlbum(album, box) {
+  const a = await getDoc(doc(db, "albums", album)), ids = a.exists() ? a.data().ids || [] : [];
+  const ds = await Promise.all(ids.map((i) => getDoc(doc(db, "photos", i))));
+  box.innerHTML = ds.filter((d) => d.exists() && String(d.data().data).startsWith("data:image/"))
+    .map((d) => `<figure class="pic"><img src="${esc(d.data().data)}" alt=""><button type="button" data-act="rm" data-p="${esc(d.id)}">✕</button></figure>`).join("") || `<span class="sub">No photos</span>`;
+}
+onSnapshot(doc(db, "albums", "ALL"), () => showAlbum("ALL", $("#shared")), () => {});
+$("#addShared").addEventListener("click", () => $("#upShared").click());
+$("#upShared").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (f) { try { await putPhoto(f, "ALL"); } catch (err) { alert(err.code || err.message); } }
+});
+$("#shared").addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (b?.dataset.act === "rm") { try { await dropPhoto("ALL", b.dataset.p); } catch (err) { alert(err.code || err.message); } }
+});
+$("#list").addEventListener("change", async (e) => {
+  if (!e.target.classList.contains("up")) return;
+  const f = e.target.files[0]; e.target.value = "";
+  const al = e.target.closest(".st").querySelector(".album");
+  if (f && al.dataset.album) { try { await putPhoto(f, al.dataset.album); await showAlbum(al.dataset.album, al); } catch (err) { alert(err.code || err.message); } }
+});
 let rFirst = true;
 onSnapshot(collection(db, "ratings"), (s) => {
   const r = s.docs.map((d) => d.data()).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -159,7 +205,7 @@ $("#reset").addEventListener("click", async () => {
   try {
     const b = writeBatch(db);
     wheel.forEach((_, id) => b.delete(doc(db, "wheel", id)));
-    b.delete(doc(db, "meta", "draw"));
+    b.delete(doc(db, "meta", "draw")); b.delete(doc(db, "meta", "event"));
     await b.commit();
   } catch (e) { alert(e.code || e.message); }
 });
@@ -177,6 +223,16 @@ $("#list").addEventListener("click", async (e) => {
     } else if (b.dataset.act === "phone") {
       const p = await getDoc(doc(db, "contacts", id));
       box.querySelector(".ph").textContent = p.exists() ? p.data().phone : "—";
+    } else if (b.dataset.act === "photos") {
+      const al = box.querySelector(".album"), row = box.querySelector(".addrow");
+      if (!al.hidden) { al.hidden = row.hidden = true; opened.delete(id); return; }
+      const ak = await akOf(id);
+      if (!ak) { alert("No phone on file for this account"); return; }
+      opened.set(id, ak); al.dataset.album = ak; al.hidden = row.hidden = false; await showAlbum(ak, al);
+    } else if (b.dataset.act === "addp") {
+      box.querySelector(".up").click();
+    } else if (b.dataset.act === "rm") {
+      const al = b.closest(".album"); await dropPhoto(al.dataset.album, b.dataset.p); await showAlbum(al.dataset.album, al);
     } else if (b.dataset.act === "del" && confirm(`Delete ${x.name} (${id})?`)) {
       const w = writeBatch(db);
       w.delete(ref); w.delete(doc(db, "contacts", id)); w.delete(doc(db, "wheel", id)); w.delete(doc(db, "ratings", id));

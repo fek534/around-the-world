@@ -1,9 +1,10 @@
-import { db, auth, isAdmin, logout, COUNTRIES, PIN_HASH, PRIZES, drawWheel, spinTo, sleep, sha, sfx } from "./common.js";
+import { db, auth, isAdmin, logout, COUNTRIES, PIN_HASH, PRIZES, drawWheel, spinTo, sleep, sha, sfx, confetti, esc, shrink } from "./common.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, setDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp, onSnapshot }
+import { collection, doc, getDoc, setDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp, onSnapshot }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const YEAR = 2026;
+const TOTAL = COUNTRIES.length;
 const T = {
   ar: {
     title: "جواز السفر الرقمي", tag: "حول العالم في يوم واحد", begin: "ابدأ الرحلة",
@@ -13,7 +14,7 @@ const T = {
     eName: "اكتب اسمك بالكامل.", eMajor: "اكتب تخصصك.", ePhone: "رقم الموبايل غير صحيح.",
     eNet: "تعذر الاتصال. تأكد من الإنترنت وجرّب تاني.", wait: "جاري الإصدار...",
     tapHint: "اضغط على الدولة وأدخل رمز الختم من المنظم.",
-    ready: "جمعت الأختام الخمسة! ادخل السحب الآن.", inDraw: "أنت داخل السحب النهائي. حظ سعيد!",
+    ready: "جمعت كل الأختام! ادخل السحب الآن.", inDraw: "أنت داخل السحب النهائي. حظ سعيد!",
     draw: "ادخل السحب النهائي", pinFor: "رمز", badPin: "الرمز غير صحيح.", locked: "محاولات كتير. استنى 30 ثانية.",
     logout: "تسجيل الخروج", have: "عندي باسبور", staff: "دخول المنظمين", loginTitle: "ادخل برقم موبايلك",
     login: "دخول", back: "رجوع", eLogin: "الرقم ده مش مسجل عندنا.", exists: "الرقم ده مسجل قبل كده، فتحنالك باسبورك.",
@@ -22,7 +23,10 @@ const T = {
     vipMsg: "كسبت VIP! لفة إضافية ✨", won: "كسبت:", sorry: "سوري، حظ أوفر المرة الجاية",
     thanks: "مبروك! 🎉 حضرت الـ event معانا، شكراً لوجودك ونورتنا.",
     rateTitle: "قيّم الـ event", ratePh: "اكتب رأيك (اختياري)", rateSend: "ارسل التقييم",
-    rated: "شكراً على تقييمك! ⭐", ePick: "اختار عدد النجوم."
+    rated: "شكراً على تقييمك! ⭐", ePick: "اختار عدد النجوم.",
+    special: "يا {n} 💛 العجلة مختارتكش المرة دي، بس إنت كسبت رحلة حوالين العالم في يوم واحد! حضورك وحماسك هما الجايزة الحقيقية. نشوفك في الإيفنت الجاي 🌍✨",
+    memTitle: "📸 ذكرياتي", memHint: "الصور دي يشوفها إنت والمنظمين بس.", memCam: "📷 التقط صورة", memPick: "🖼 اختر من المعرض",
+    memShared: "من المنظمين", memFull: "وصلت للحد الأقصى (12 صورة).", memWait: "جاري الحفظ..."
   },
   en: {
     title: "Digital Passport", tag: "Around the World in One Day", begin: "Begin the journey",
@@ -32,7 +36,7 @@ const T = {
     eName: "Enter your full name.", eMajor: "Enter your major.", ePhone: "Mobile number is not valid.",
     eNet: "Could not connect. Check your internet and try again.", wait: "Issuing...",
     tapHint: "Tap a country and enter the stamp code from the organizer.",
-    ready: "All 5 stamps collected! Enter the draw now.", inDraw: "You are in the final draw. Good luck!",
+    ready: "All stamps collected! Enter the draw now.", inDraw: "You are in the final draw. Good luck!",
     draw: "Enter the final draw", pinFor: "Code for", badPin: "Wrong code.", locked: "Too many tries. Wait 30 seconds.",
     logout: "Log out", have: "I have a passport", staff: "Organizers", loginTitle: "Log in with your mobile",
     login: "Log in", back: "Back", eLogin: "This number is not registered.", exists: "This number is already registered, so we opened your passport.",
@@ -41,7 +45,10 @@ const T = {
     vipMsg: "You got VIP! One more spin ✨", won: "You won:", sorry: "Sorry, better luck next time",
     thanks: "Congratulations! 🎉 You attended the event. Thank you for joining us.",
     rateTitle: "Rate the event", ratePh: "Write your feedback (optional)", rateSend: "Send rating",
-    rated: "Thanks for your rating! ⭐", ePick: "Pick a star rating."
+    rated: "Thanks for your rating! ⭐", ePick: "Pick a star rating.",
+    special: "Dear {n} 💛 the wheel did not pick you this time, but you won a trip around the world in one day! Your energy was the real prize. See you at the next event 🌍✨",
+    memTitle: "📸 My memories", memHint: "Only you and the organizers can see these photos.", memCam: "📷 Take a photo", memPick: "🖼 Choose from gallery",
+    memShared: "From the organizers", memFull: "You reached the limit (12 photos).", memWait: "Saving..."
   }
 };
 
@@ -52,12 +59,15 @@ const LM = {
   italy: ["M8 96V50Q8 30 50 30Q92 30 92 50V96Z", ...arches, "M8 96H92"],
   france: ["M50 6V22", "M46 22H54L58 44H42Z", "M42 44L33 98M58 44L67 98", "M40 62H60M36 80H64M46 32H54", "M38 98Q50 74 62 98"],
   turkey: ["M28 72Q50 22 72 72", "M24 72H76V96H24Z", "M12 96V44L15 34L18 44V96", "M82 96V44L85 34L88 44V96", "M36 72V96M64 72V96"],
-  spain: ["M16 98V50L20 22L24 50V98", "M34 98V40L38 10L42 40V98", "M46 98V56L50 30L54 56V98", "M58 98V40L62 10L66 40V98", "M76 98V50L80 22L84 50V98", "M10 98H90"]
+  spain: ["M16 98V50L20 22L24 50V98", "M34 98V40L38 10L42 40V98", "M46 98V56L50 30L54 56V98", "M58 98V40L62 10L66 40V98", "M76 98V50L80 22L84 50V98", "M10 98H90"],
+  germany: ["M8 36H92", "M8 46H92", "M30 36V26H70V36", "M40 26Q50 12 60 26", "M50 26V8M46 12L50 6L54 12", "M14 46V92M28 46V92M42 46V92M58 46V92M72 46V92M86 46V92", "M8 92H92", "M8 98H92"]
 };
+const ART = { spain: "art-spain.png", france: "art-france.png", korea: "art-korea.png", turkey: "art-turkey.png" };
+const svgOf = (id) => `<svg viewBox="0 0 100 104">${LM[id].map((d) => `<path pathLength="1" d="${d}"/>`).join("")}</svg>`;
 $lm();
 function $lm() {
   document.querySelector("#lmBox").innerHTML = COUNTRIES.map((c, i) =>
-    `<figure class="lm" style="--d:${i * 5}s"><svg viewBox="0 0 100 104">${LM[c.id].map((d) => `<path pathLength="1" d="${d}"/>`).join("")}</svg><figcaption data-c="${c.id}"></figcaption></figure>`
+    `<figure class="lm" style="--d:${i * 5}s">${ART[c.id] ? `<div class="lmimg" style="--art:url(${ART[c.id]})"></div>` : svgOf(c.id)}<figcaption data-c="${c.id}"></figcaption></figure>`
   ).join("");
 }
 
@@ -93,28 +103,40 @@ function applyLang() {
   if (student) renderPassport();
 }
 
+let slotSig = "";
 function renderPassport() {
   const t = T[lang], got = student.stamps || [], w = wheelDoc;
   $("#pId").textContent = student.id;
   $("#pName").textContent = student.name;
   $("#pSub").textContent = `${student.major} · ${t.yr} ${t.years[student.year] ?? ""}`;
-  $("#pCount").textContent = `${got.length}/5`;
-  $("#slots").innerHTML = COUNTRIES.map((c) =>
-    `<li data-id="${c.id}" class="${got.includes(c.id) ? "done" : ""}${c.id === lastPop ? " pop" : ""}"><span class="flag">${c.flag}</span><span class="nm">${c[lang]}</span></li>`
-  ).join("");
+  $("#pCount").textContent = `${got.length}/${TOTAL}`;
+  const sig = [got.join(), lang, lastPop].join("|");
+  if (sig !== slotSig) {
+    slotSig = sig;
+    $("#slots").innerHTML = COUNTRIES.map((c, i) =>
+      `<li data-id="${c.id}" style="--art:${ART[c.id] ? `url(${ART[c.id]})` : "none"};animation-delay:${i * 0.09}s" class="${got.includes(c.id) ? "done" : ""}${c.id === lastPop ? " pop" : ""}"><div class="art">${ART[c.id] ? "" : svgOf(c.id)}</div><div class="meta"><span class="flag">${c.flag}</span><span class="nm">${c[lang]}</span></div></li>`
+    ).join("");
+  }
   lastPop = null;
   const finished = w ? w.spun : drawDone;
   $("#hint").textContent = w ? (w.spun ? "" : t.selected)
-    : drawDone ? "" : student.entered ? t.inDraw : got.length < 5 ? t.tapHint : t.ready;
+    : drawDone ? "" : student.entered ? t.inDraw : got.length < TOTAL ? t.tapHint : t.ready;
   $("#drawBtn").textContent = t.draw;
-  $("#drawBtn").hidden = student.entered || drawDone || got.length < 5;
+  $("#drawBtn").hidden = student.entered || drawDone || got.length < TOTAL;
   $("#wheelBtn").textContent = t.wheelBtn;
   $("#wheelBtn").hidden = !(w && !w.spun);
-  $("#prize").hidden = !finished;
-  if (finished) $("#prize").textContent = w ? finalLabel(w) : t.thanks;
+  $("#prize").hidden = !(w && w.spun);
+  if (w && w.spun) $("#prize").textContent = finalLabel(w);
+  const lost = drawDone && !w;
+  $("#special").hidden = !lost;
+  if (lost) {
+    $("#spText").textContent = t.special.replace("{n}", student.name.split(" ")[0]);
+    if (!store.get(`sp:${student.id}`)) { store.set(`sp:${student.id}`, "1"); confetti(); sfx("chime"); }
+  }
   const canRate = finished && !store.get(`rated:${student.id}`);
   $("#rate").hidden = !canRate;
   $("#rated").hidden = !(finished && !canRate);
+  $("#mem").hidden = !store.get("ak");
   if (!$("#wheelScreen").classList.contains("active")) show("passport");
   refreshOut();
 }
@@ -125,6 +147,8 @@ function watch() {
   watching = student.id; unsubs.forEach((u) => u()); unsubs = [];
   unsubs.push(onSnapshot(doc(db, "wheel", student.id), (s) => { wheelDoc = s.exists() ? s.data() : null; renderPassport(); }, () => {}));
   unsubs.push(onSnapshot(doc(db, "meta", "draw"), (s) => { drawDone = s.exists(); renderPassport(); }, () => {}));
+  unsubs.push(albumSnap("ALL", "all"));
+  if (store.get("ak")) unsubs.push(albumSnap(store.get("ak"), "mine"));
 }
 
 async function loadStudent(id) {
@@ -153,6 +177,7 @@ $("#regForm").addEventListener("submit", async (e) => {
   err.textContent = ""; btn.disabled = true; btn.textContent = T[lang].wait;
   try {
     const ph = await sha(v.phone);
+    store.set("ak", await sha("album:" + v.phone));
     const ex = await getDoc(doc(db, "phones", ph));
     if (ex.exists() && (await loadStudent(ex.data().id))) return;
     let id, tries = 0;
@@ -184,6 +209,7 @@ $("#loginForm").addEventListener("submit", async (e) => {
   const err = $("#lErr"), phone = normPhone($("#lPhone").value);
   try {
     const p = await getDoc(doc(db, "phones", await sha(phone)));
+    if (p.exists()) store.set("ak", await sha("album:" + phone));
     if (!p.exists() || !(await loadStudent(p.data().id))) err.textContent = T[lang].eLogin;
   } catch (e2) { err.textContent = `${T[lang].eNet} (${e2.code || e2.message})`; }
 });
@@ -191,7 +217,7 @@ $("#loginForm").addEventListener("submit", async (e) => {
 /* stamps */
 $("#slots").addEventListener("click", (e) => {
   const li = e.target.closest("li");
-  if (!li || !student || li.classList.contains("done") || student.entered || drawDone) return;
+  if (!li || !student || li.classList.contains("done") || student.entered) return;
   pinFor = li.dataset.id;
   const c = COUNTRIES.find((x) => x.id === pinFor);
   $("#pinTitle").textContent = `${c.flag} ${T[lang].pinFor} ${c[lang]}`;
@@ -224,7 +250,7 @@ $("#drawBtn").addEventListener("click", async () => {
   const btn = $("#drawBtn"); btn.disabled = true;
   try {
     await updateDoc(doc(db, "students", student.id), { entered: true, enteredAt: serverTimestamp() });
-    student.entered = true; sfx("chime"); navigator.vibrate?.([80, 60, 80]);
+    student.entered = true; sfx("chime"); confetti(); navigator.vibrate?.([80, 60, 80]);
     renderPassport(); watch();
   } catch (e) { console.error(e); $("#hint").textContent = `${T[lang].eNet} (${e.code || e.message})`; }
   finally { btn.disabled = false; }
@@ -245,7 +271,7 @@ $("#spinBtn").addEventListener("click", async () => {
   await spinTo(cv, PRIZES.findIndex((p) => p.id === w.main), PRIZES.length);
   sfx("stamp");
   $("#wRes").textContent = finalLabel(w);
-  sfx("chime"); navigator.vibrate?.([80, 60, 80]);
+  sfx("chime"); confetti(); navigator.vibrate?.([80, 60, 80]);
   try { await updateDoc(doc(db, "wheel", student.id), { spun: true, spunAt: serverTimestamp() }); } catch (e) { console.error(e); }
   spinning = false; $("#spinBtn").hidden = true;
 });
@@ -268,6 +294,53 @@ $("#rateBtn").addEventListener("click", async () => {
   }
   store.set(`rated:${student.id}`, "1"); sfx("chime"); btn.disabled = false; renderPassport();
 });
+
+/* memories: photos private to the owner and the organizers */
+const album = { mine: [], all: [] }, cache = new Map();
+const albumSnap = (key, k) => onSnapshot(doc(db, "albums", key), (s) => { album[k] = s.exists() ? s.data().ids || [] : []; syncPhotos(); }, () => {});
+async function syncPhotos() {
+  const want = [...album.all.map((i) => [i, 1]), ...album.mine.map((i) => [i, 0])];
+  await Promise.all(want.filter(([i]) => !cache.has(i)).map(async ([i]) => {
+    try { const d = await getDoc(doc(db, "photos", i)); cache.set(i, d.exists() ? d.data().data : null); } catch { cache.set(i, null); }
+  }));
+  $("#gallery").innerHTML = want.filter(([i]) => String(cache.get(i)).startsWith("data:image/"))
+    .map(([i, sh], k) => `<figure class="pic" style="animation-delay:${k * 0.05}s"><img src="${esc(cache.get(i))}" alt="">${sh ? `<figcaption>${T[lang].memShared}</figcaption>` : ""}</figure>`).join("");
+}
+async function onPick(e) {
+  const f = e.target.files[0]; e.target.value = "";
+  const ak = store.get("ak"), err = $("#memErr");
+  if (!f || !ak) return;
+  if (album.mine.length >= 12) { err.textContent = T[lang].memFull; return; }
+  err.textContent = T[lang].memWait;
+  try {
+    const data = await shrink(f), ref = doc(collection(db, "photos"));
+    await setDoc(ref, { data, by: "student", owner: student.id, createdAt: serverTimestamp() });
+    await setDoc(doc(db, "albums", ak), { ids: arrayUnion(ref.id) }, { merge: true });
+    cache.set(ref.id, data); err.textContent = ""; sfx("stamp");
+  } catch (x) { console.error(x); err.textContent = `${T[lang].eNet} (${x.code || x.message})`; }
+}
+$("#camIn").addEventListener("change", onPick);
+$("#galIn").addEventListener("change", onPick);
+$("#camBtn").addEventListener("click", () => $("#camIn").click());
+$("#galBtn").addEventListener("click", () => $("#galIn").click());
+$("#gallery").addEventListener("click", (e) => { const im = e.target.closest("img"); if (im) { $("#lbImg").src = im.src; $("#lb").hidden = false; } });
+$("#lb").addEventListener("click", () => { $("#lb").hidden = true; });
+
+/* background music + ambient motion */
+const bgm = $("#bgm"); bgm.volume = 0.3;
+let muted = store.get("muted") === "1", started = false;
+const syncMute = () => { $("#muteBtn").textContent = muted ? "🔇" : "🔊"; if (muted) bgm.pause(); else if (started) bgm.play().catch(() => {}); };
+addEventListener("pointerdown", () => { if (started) return; started = true; if (!muted) bgm.play().catch(() => {}); }, { once: true });
+$("#muteBtn").addEventListener("click", () => { muted = !muted; store.set("muted", muted ? "1" : "0"); started = true; syncMute(); });
+syncMute();
+(function fx() {
+  const f = document.createElement("div"); f.id = "fx"; f.setAttribute("aria-hidden", "true");
+  const plane = '<svg class="flyby" viewBox="0 0 24 24"><path fill="currentColor" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>';
+  let h = "";
+  for (let i = 0; i < 24; i++) h += `<i style="left:${Math.random() * 100}%;top:${Math.random() * 100}%;--s:${2 + Math.random() * 4}px;--t:${6 + Math.random() * 9}s;--dl:${-Math.random() * 9}s"></i>`;
+  f.innerHTML = h + plane + plane.replace('class="flyby"', 'class="flyby f2"');
+  document.body.prepend(f);
+})();
 
 $("#beginBtn").addEventListener("click", () => { sfx("tick"); show("register"); });
 $("#langBtn").addEventListener("click", () => { lang = lang === "ar" ? "en" : "ar"; store.set("lang", lang); applyLang(); });

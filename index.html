@@ -25,6 +25,8 @@
 
 <button id="langBtn" class="lang" type="button">EN</button>
 <button id="outBtn" class="lang out" type="button" data-i="logout" hidden>تسجيل الخروج</button>
+<button id="muteBtn" class="lang mute" type="button" aria-label="music">🔊</button>
+<audio id="bgm" src="music.mp3" loop preload="none"></audio>
 
 <main>
   <!-- Splash -->
@@ -101,6 +103,7 @@
       <button id="drawBtn" class="gold" type="button" hidden></button>
       <button id="wheelBtn" class="gold" type="button" hidden></button>
       <p id="prize" class="result" hidden></p>
+      <div id="special" class="special" hidden><div class="sp-emoji" aria-hidden="true">💛</div><p id="spText"></p></div>
       <div id="rate" class="rate" hidden>
         <div class="rule"></div>
         <h3 data-i="rateTitle">قيّم الـ event</h3>
@@ -112,6 +115,19 @@
         <button id="rateBtn" class="gold" type="button" data-i="rateSend">ارسل التقييم</button>
       </div>
       <p id="rated" class="result" data-i="rated" hidden>شكراً على تقييمك! ⭐</p>
+      <div id="mem" class="rate" hidden>
+        <div class="rule"></div>
+        <h3 data-i="memTitle">📸 ذكرياتي</h3>
+        <p class="muted small" data-i="memHint">الصور دي يشوفها إنت والمنظمين بس.</p>
+        <div class="acts2">
+          <button id="camBtn" class="gold" type="button" data-i="memCam">📷 التقط صورة</button>
+          <button id="galBtn" class="ghost" type="button" data-i="memPick">🖼 اختر من المعرض</button>
+        </div>
+        <input id="camIn" type="file" accept="image/*" capture="environment" hidden>
+        <input id="galIn" type="file" accept="image/*" hidden>
+        <p id="memErr" class="err" role="alert"></p>
+        <div id="gallery" class="album"></div>
+      </div>
     </div>
   </section>
 </main>
@@ -125,6 +141,8 @@
     <button id="pinCancel" class="ghost" type="button" data-i="cancel">إلغاء</button>
   </form>
 </div>
+
+<div id="lb" class="modal" hidden><img id="lbImg" alt="" style="max-width:100%;max-height:90vh;border-radius:12px"></div>
 
 <script type="module" src="app.js"></script>
 </body>
