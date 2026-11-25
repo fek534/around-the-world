@@ -9,12 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body class="intro">
-<video id="vid" src="intro.mp4" poster="intro.jpg" playsinline webkit-playsinline preload="auto" autoplay></video>
+<body>
+<video id="vid" src="intro.mp4" poster="intro.jpg" playsinline webkit-playsinline preload="auto" autoplay muted loop></video>
 <div id="vidShade"></div>
-<div id="introUI">
-  <button id="introGo" class="gold" type="button" data-i="introGo" hidden>▶ اضغط للبدء</button>
-</div>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="logo" viewBox="0 0 100 100">
@@ -40,6 +37,25 @@
       <div class="seal"><svg><use href="#logo"/></svg><div class="orbit" aria-hidden="true"><svg class="plane" viewBox="0 0 24 24"><path fill="currentColor" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div></div>
       <h1 data-i="tag">حول العالم في يوم واحد</h1>
       <div id="lmBox" class="lmbox" aria-hidden="true"></div>
+
+      <!-- Onboarding: 3-step quick guide -->
+      <div class="onboard" role="list" aria-label="How it works">
+        <div class="ob-step" role="listitem">
+          <span class="ob-ic" aria-hidden="true">🛂</span>
+          <span class="ob-tx" data-i="onb1">أصدر باسبورك</span>
+        </div>
+        <span class="ob-arrow" aria-hidden="true">➜</span>
+        <div class="ob-step" role="listitem">
+          <span class="ob-ic" aria-hidden="true">🗺️</span>
+          <span class="ob-tx" data-i="onb2">زُر أركان الدول واجمع الأختام</span>
+        </div>
+        <span class="ob-arrow" aria-hidden="true">➜</span>
+        <div class="ob-step" role="listitem">
+          <span class="ob-ic" aria-hidden="true">🎡</span>
+          <span class="ob-tx" data-i="onb3">لف العجلة واربح</span>
+        </div>
+      </div>
+
       <button id="beginBtn" class="gold" type="button" data-i="begin">ابدأ الرحلة</button>
       <button id="haveBtn" class="ghost" type="button" data-i="have">عندي باسبور</button>
       <a class="ghost" href="admin.html" data-i="staff">دخول المنظمين</a>
@@ -61,7 +77,8 @@
       <label><span data-i="phone">رقم الموبايل</span>
         <input id="fPhone" type="tel" inputmode="tel" autocomplete="tel" required></label>
       <p id="err" class="err" role="alert"></p>
-      <button id="regBtn" class="gold" type="submit" data-i="issue">أصدر الباسبور</button>
+      <button id="regBtn" class="gold" type="submit"><span class="lbl" data-i="issue">أصدر الباسبور</span></button>
+      <p class="privacy" data-i="privacy"></p>
     </form>
   </section>
 
@@ -72,7 +89,7 @@
       <label><span data-i="phone">رقم الموبايل</span>
         <input id="lPhone" type="tel" inputmode="tel"></label>
       <p id="lErr" class="err" role="alert"></p>
-      <button class="gold" type="submit" data-i="login">دخول</button>
+      <button id="loginBtn" class="gold" type="submit" data-i="login">دخول</button>
       <button id="lBack" class="ghost" type="button" data-i="back">رجوع</button>
     </form>
   </section>
