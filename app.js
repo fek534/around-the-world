@@ -1,4 +1,4 @@
-import { db, auth, isAdmin, logout, COUNTRIES, PIN_HASH, PRIZES, drawWheel, spinTo, sleep, sha, sfx, confetti, esc, shrink, tune } from "./common.js";
+import { db, auth, isAdmin, logout, COUNTRIES, PIN_HASH, PRIZES, drawWheel, spinTo, sleep, sha, sfx, confetti, esc, shrink, tune, audioCtx } from "./common.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { collection, doc, getDoc, setDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp, onSnapshot }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -27,7 +27,9 @@ const T = {
     special: "يا {n} 💛 العجلة مختارتكش المرة دي، بس إنت كسبت رحلة حوالين العالم في يوم واحد! حضورك وحماسك هما الجايزة الحقيقية. نشوفك في الإيفنت الجاي 🌍✨",
     memTitle: "📸 ذكرياتي", memHint: "الصور دي يشوفها إنت والمنظمين بس.", memCam: "📷 التقط صورة", memPick: "🖼 اختر من المعرض",
     memShared: "من المنظمين", memFull: "وصلت للحد الأقصى (12 صورة).", memWait: "جاري الحفظ...",
-    skip: "تخطي", introGo: "▶ اضغط للبدء"
+    skip: "تخطي", introGo: "▶ اضغط للبدء",
+    onb1: "أصدر باسبورك", onb2: "زُر أركان الدول واجمع {n} أختام", onb3: "لف العجلة واربح",
+    privacy: "🔒 بياناتك وصورك تُستخدم فقط لأغراض هذه الفعالية، ولن تُشارك مع أي جهة خارجية."
   },
   en: {
     title: "Digital Passport", tag: "Around the World in One Day", begin: "Begin the journey",
@@ -50,7 +52,9 @@ const T = {
     special: "Dear {n} 💛 the wheel did not pick you this time, but you won a trip around the world in one day! Your energy was the real prize. See you at the next event 🌍✨",
     memTitle: "📸 My memories", memHint: "Only you and the organizers can see these photos.", memCam: "📷 Take a photo", memPick: "🖼 Choose from gallery",
     memShared: "From the organizers", memFull: "You reached the limit (12 photos).", memWait: "Saving...",
-    skip: "Skip", introGo: "▶ Tap to start"
+    skip: "Skip", introGo: "▶ Tap to start",
+    onb1: "Issue your passport", onb2: "Visit the country booths and collect {n} stamps", onb3: "Spin the wheel and win",
+    privacy: "🔒 Your data and photos are used only for this event and will never be shared with third parties."
   }
 };
 
@@ -83,13 +87,24 @@ let lang = store.get("lang") || "ar";
 let student = null, pinFor = null, fails = 0, lockUntil = 0, lastPop = null;
 let wheelDoc = null, drawDone = false, unsubs = [], spinning = false;
 
+/* generic busy/loading state for action buttons (spinner + disable) */
+function setBusy(btn, on) {
+  if (!btn) return;
+  btn.disabled = on;
+  btn.classList.toggle("is-busy", on);
+  btn.setAttribute("aria-busy", on ? "true" : "false");
+  let sp = btn.querySelector(".spin");
+  if (on) {
+    if (!sp) { sp = document.createElement("span"); sp.className = "spin"; sp.setAttribute("aria-hidden", "true"); btn.appendChild(sp); }
+  } else if (sp) sp.remove();
+}
+
 const BGSCREENS = ["splash", "register", "login"];
 const show = (id) => {
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
-  const intro = document.body.classList.contains("intro");
-  const bg = BGSCREENS.includes(id) && !intro;
+  const bg = BGSCREENS.includes(id);
   document.body.classList.toggle("vbg", bg);
-  if (bg) vid.play().catch(() => {}); else if (!intro) vid.pause();
+  if (bg) vid.play().catch(() => {});
 };
 
 function finalLabel(w) {
@@ -102,6 +117,8 @@ function applyLang() {
   document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   document.querySelectorAll("[data-i]").forEach((el) => { el.textContent = t[el.dataset.i]; });
   document.querySelectorAll("[data-ph]").forEach((el) => { el.placeholder = t[el.dataset.ph]; });
+  const onb2 = document.querySelector('[data-i="onb2"]');
+  if (onb2) onb2.textContent = t.onb2.replace("{n}", TOTAL);
   document.querySelectorAll("#lmBox figcaption").forEach((el) => {
     const c = COUNTRIES.find((x) => x.id === el.dataset.c); el.textContent = `${c.flag} ${c[lang]}`;
   });
@@ -181,9 +198,9 @@ function validate() {
 
 $("#regForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const v = validate(), err = $("#err"), btn = $("#regBtn");
+  const v = validate(), err = $("#err"), btn = $("#regBtn"), lbl = btn.querySelector(".lbl");
   if (v.error) { err.textContent = v.error; return; }
-  err.textContent = ""; btn.disabled = true; btn.textContent = T[lang].wait;
+  err.textContent = ""; setBusy(btn, true); if (lbl) lbl.textContent = T[lang].wait;
   try {
     const ph = await sha(v.phone);
     store.set("ak", await sha("album:" + v.phone));
@@ -207,7 +224,7 @@ $("#regForm").addEventListener("submit", async (e) => {
   } catch (e3) {
     console.error(e3);
     err.textContent = `${T[lang].eNet} (${e3.code || e3.message})`;
-  } finally { btn.disabled = false; btn.textContent = T[lang].issue; }
+  } finally { setBusy(btn, false); if (lbl) lbl.textContent = T[lang].issue; }
 });
 
 /* login with mobile number only */
@@ -215,12 +232,14 @@ $("#haveBtn").addEventListener("click", () => { $("#lErr").textContent = ""; sho
 $("#lBack").addEventListener("click", () => show("splash"));
 $("#loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const err = $("#lErr"), phone = normPhone($("#lPhone").value);
+  const err = $("#lErr"), btn = $("#loginBtn"), phone = normPhone($("#lPhone").value);
+  err.textContent = ""; setBusy(btn, true);
   try {
     const p = await getDoc(doc(db, "phones", await sha(phone)));
     if (p.exists()) store.set("ak", await sha("album:" + phone));
     if (!p.exists() || !(await loadStudent(p.data().id))) err.textContent = T[lang].eLogin;
   } catch (e2) { err.textContent = `${T[lang].eNet} (${e2.code || e2.message})`; }
+  finally { setBusy(btn, false); }
 });
 
 /* stamps */
@@ -295,13 +314,13 @@ $("#stars").addEventListener("click", (e) => {
 $("#rateBtn").addEventListener("click", async () => {
   const err = $("#rateErr"), btn = $("#rateBtn");
   if (!stars) { err.textContent = T[lang].ePick; return; }
-  err.textContent = ""; btn.disabled = true;
+  err.textContent = ""; setBusy(btn, true);
   try {
     await setDoc(doc(db, "ratings", student.id), { id: student.id, name: student.name, stars, comment: $("#rateTxt").value.trim().slice(0, 300), createdAt: serverTimestamp() });
   } catch (e) {
-    if (e.code !== "permission-denied") { console.error(e); err.textContent = `${T[lang].eNet} (${e.code || e.message})`; btn.disabled = false; return; }
+    if (e.code !== "permission-denied") { console.error(e); err.textContent = `${T[lang].eNet} (${e.code || e.message})`; setBusy(btn, false); return; }
   }
-  store.set(`rated:${student.id}`, "1"); sfx("chime"); btn.disabled = false; renderPassport();
+  store.set(`rated:${student.id}`, "1"); sfx("chime"); setBusy(btn, false); renderPassport();
 });
 
 /* memories: photos private to the owner and the organizers */
@@ -320,13 +339,16 @@ async function onPick(e) {
   const ak = store.get("ak"), err = $("#memErr");
   if (!f || !ak) return;
   if (album.mine.length >= 12) { err.textContent = T[lang].memFull; return; }
-  err.textContent = T[lang].memWait;
+  const trig = e.target.id === "camIn" ? $("#camBtn") : $("#galBtn");
+  const other = trig === $("#camBtn") ? $("#galBtn") : $("#camBtn");
+  err.textContent = T[lang].memWait; setBusy(trig, true); other.disabled = true;
   try {
     const data = await shrink(f), ref = doc(collection(db, "photos"));
     await setDoc(ref, { data, by: "student", owner: student.id, createdAt: serverTimestamp() });
     await setDoc(doc(db, "albums", ak), { ids: arrayUnion(ref.id) }, { merge: true });
     cache.set(ref.id, data); err.textContent = ""; sfx("stamp");
   } catch (x) { console.error(x); err.textContent = `${T[lang].eNet} (${x.code || x.message})`; }
+  finally { setBusy(trig, false); other.disabled = false; }
 }
 $("#camIn").addEventListener("change", onPick);
 $("#galIn").addEventListener("change", onPick);
@@ -335,34 +357,15 @@ $("#galBtn").addEventListener("click", () => $("#galIn").click());
 $("#gallery").addEventListener("click", (e) => { const im = e.target.closest("img"); if (im) { $("#lbImg").src = im.src; $("#lb").hidden = false; } });
 $("#lb").addEventListener("click", () => { $("#lb").hidden = true; });
 
-/* background music + ambient motion */
+/* background video (muted autoplay) + ambient music unlocked on first tap anywhere */
 const vid = $("#vid");
-let muted = store.get("muted") === "1", gestured = false, introActive = true;
-const maybeTune = () => { if (gestured && !introActive) tune(!muted); };
+vid.muted = true; vid.loop = true;
+let muted = store.get("muted") === "1", gestured = false;
+const maybeTune = () => { if (gestured) tune(!muted); };
 const syncMute = () => { $("#muteBtn").textContent = muted ? "🔇" : "🔊"; maybeTune(); };
-addEventListener("pointerdown", () => { gestured = true; maybeTune(); }, { once: true });
+addEventListener("pointerdown", () => { gestured = true; try { audioCtx(); } catch (_) {} maybeTune(); }, { once: true });
 $("#muteBtn").addEventListener("click", () => { muted = !muted; store.set("muted", muted ? "1" : "0"); syncMute(); });
 
-function endIntro() {
-  if (!introActive && !document.body.classList.contains("intro")) return;
-  introActive = false;
-  try { sessionStorage.setItem("intro", "1"); } catch (_) {}
-  vid.muted = true; vid.loop = true;
-  document.body.classList.remove("intro");
-  show(document.querySelector(".screen.active")?.id || "splash");
-  syncMute();
-}
-async function startIntro() {
-  document.body.classList.add("intro");
-  vid.preload = "auto"; vid.muted = false; vid.loop = false;
-  vid.addEventListener("ended", endIntro, { once: true });
-  vid.addEventListener("error", endIntro, { once: true });
-  try { await vid.play(); } catch { $("#introGo").hidden = false; }
-}
-$("#introGo").addEventListener("click", async () => {
-  $("#introGo").hidden = true; gestured = true; vid.muted = false;
-  try { await vid.play(); } catch { endIntro(); }
-});
 (function fx() {
   const f = document.createElement("div"); f.id = "fx"; f.setAttribute("aria-hidden", "true");
   const plane = '<svg class="flyby" viewBox="0 0 24 24"><path fill="currentColor" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>';
@@ -379,5 +382,6 @@ function refreshOut() { $("#outBtn").hidden = !(student || isAdmin(auth.currentU
 onAuthStateChanged(auth, refreshOut);
 
 applyLang();
-startIntro();
+show("splash");
+vid.play().catch(() => {});
 (async () => { const id = store.get("passportId"); if (id) { try { await loadStudent(id); } catch (_) {} } })();
