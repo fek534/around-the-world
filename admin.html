@@ -159,10 +159,24 @@ async function showAlbum(album, box) {
     .map((d) => `<figure class="pic"><img src="${esc(d.data().data)}" alt=""><button type="button" data-act="rm" data-p="${esc(d.id)}">✕</button></figure>`).join("") || `<span class="sub">No photos</span>`;
 }
 onSnapshot(doc(db, "albums", "ALL"), () => showAlbum("ALL", $("#shared")), () => {});
+
+function setBusy(btn, on) {
+  if (!btn) return;
+  btn.disabled = on; btn.classList.toggle("is-busy", on);
+  let sp = btn.querySelector(".spin");
+  if (on) { if (!sp) { sp = document.createElement("span"); sp.className = "spin"; sp.setAttribute("aria-hidden", "true"); btn.appendChild(sp); } }
+  else if (sp) sp.remove();
+}
+
 $("#addShared").addEventListener("click", () => $("#upShared").click());
 $("#upShared").addEventListener("change", async (e) => {
   const f = e.target.files[0]; e.target.value = "";
-  if (f) { try { await putPhoto(f, "ALL"); } catch (err) { alert(err.code || err.message); } }
+  const btn = $("#addShared");
+  if (f) {
+    setBusy(btn, true);
+    try { await putPhoto(f, "ALL"); } catch (err) { alert(err.code || err.message); }
+    setBusy(btn, false);
+  }
 });
 $("#shared").addEventListener("click", async (e) => {
   const b = e.target.closest("button");
@@ -188,7 +202,7 @@ $("#q").addEventListener("input", renderList);
 $("#extract").addEventListener("click", async () => {
   const pool = entrants.filter((x) => !wheel.has(x.id));
   if (!pool.length || wheel.size) return;
-  $("#extract").disabled = true;
+  const btn = $("#extract"); setBusy(btn, true);
   try {
     await spinTo($("#ew"), Math.floor(Math.random() * entrants.length), entrants.length, 4500);
     const b = writeBatch(db);
@@ -198,7 +212,8 @@ $("#extract").addEventListener("click", async () => {
     });
     b.set(doc(db, "meta", "draw"), { done: true, at: serverTimestamp() });
     await b.commit(); sfx("chime");
-  } catch (e) { alert(e.code || e.message); $("#extract").disabled = false; }
+  } catch (e) { alert(e.code || e.message); btn.disabled = false; }
+  btn.classList.remove("is-busy"); const sp = btn.querySelector(".spin"); if (sp) sp.remove();
 });
 $("#reset").addEventListener("click", async () => {
   if (!confirm("Reset the draw? Selected winners and prizes will be deleted.") || !confirm("Are you sure?")) return;
